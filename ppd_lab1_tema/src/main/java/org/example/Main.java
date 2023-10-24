@@ -137,6 +137,7 @@ public class Main {
                 //out of bounds - line
                 if (ii < 0) ii = 0;
                 else if (ii >= N) ii = N - 1;
+
                 //out of bounds - column
                 if (jj < 0) jj = 0;
                 else if (jj >= M) jj = M - 1;
@@ -160,19 +161,29 @@ public class Main {
 
         @Override
         public void run() {
-            if (N > M) {
-                for (int i = start; i < end; i++) {
-                    for (int j = 0; j < M; j++) {
-                        this.result[i][j] = convolution(i, j);
-                    }
-                }
-            } else {
-                for (int i = 0; i < N; i++) {
-                    for (int j = start; j < end; j++) {
-                        this.result[i][j] = convolution(i, j);
-                    }
+            for (int i = start; i < end; i++) {
+                for (int j = 0; j < M; j++) {
+                    this.result[i][j] = convolution(i, j);
                 }
             }
+//            for (int i = 0; i < N; i++) {
+//                for (int j = start; j < end; j++) {
+//                    this.result[i][j] = convolution(i, j);
+//                }
+//            }
+//            if (N > M) {
+//                for (int i = start; i < end; i++) {
+//                    for (int j = 0; j < M; j++) {
+//                        this.result[i][j] = convolution(i, j);
+//                    }
+//                }
+//            } else {
+//                for (int i = 0; i < N; i++) {
+//                    for (int j = start; j < end; j++) {
+//                        this.result[i][j] = convolution(i, j);
+//                    }
+//                }
+//            }
         }
     }
 }
