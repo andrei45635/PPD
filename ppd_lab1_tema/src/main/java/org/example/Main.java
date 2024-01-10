@@ -1,6 +1,8 @@
 package org.example;
 
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 public class Main {
     private static int[][] matrix;
@@ -10,10 +12,9 @@ public class Main {
     private static int m = 0, n = 0, N = 0, M = 0, lineOffset = 0, columnOffset;
 
     public static void main(String[] args) throws IOException, InterruptedException {
-        //String filename = "ppd_lab1_tema/src/main/resources/date.txt";
         String filename = "C:\\Users\\GIGABYTE\\IdeaProjects\\PPD\\ppd_lab1_tema\\src\\main\\resources\\date.txt";
-        //String output = "ppd_lab1_tema/src/main/resources/output.txt";
         String output = "C:\\Users\\GIGABYTE\\IdeaProjects\\PPD\\ppd_lab1_tema\\src\\main\\resources\\output.txt";
+        String synchronized_output = "C:\\Users\\GIGABYTE\\IdeaProjects\\PPD\\ppd_lab1_tema\\src\\main\\resources\\synchronized_output.txt";
 
         read(filename);
 
@@ -25,11 +26,13 @@ public class Main {
 
         if(p == 1){
             sequential();
+            write(synchronized_output);
         } else {
             parallel();
         }
 
         write(output);
+        System.out.println("Sync and Async outputs are the same: " + sameContent(output, synchronized_output));
     }
 
     public static void read(String filename) {
@@ -83,6 +86,10 @@ public class Main {
         BufferedWriter bufferedWriter = new BufferedWriter(new FileWriter(output));
         bufferedWriter.write(stringBuilder.toString());
         bufferedWriter.close();
+    }
+
+    private static boolean sameContent(String file1, String file2) throws IOException {
+        return Files.mismatch(Path.of(file1), Path.of(file2)) == -1;
     }
 
     private static void sequential() {
@@ -161,29 +168,19 @@ public class Main {
 
         @Override
         public void run() {
-            for (int i = start; i < end; i++) {
-                for (int j = 0; j < M; j++) {
-                    this.result[i][j] = convolution(i, j);
+            if (N > M) {
+                for (int i = start; i < end; i++) {
+                    for (int j = 0; j < M; j++) {
+                        this.result[i][j] = convolution(i, j);
+                    }
+                }
+            } else {
+                for (int i = 0; i < N; i++) {
+                    for (int j = start; j < end; j++) {
+                        this.result[i][j] = convolution(i, j);
+                    }
                 }
             }
-//            for (int i = 0; i < N; i++) {
-//                for (int j = start; j < end; j++) {
-//                    this.result[i][j] = convolution(i, j);
-//                }
-//            }
-//            if (N > M) {
-//                for (int i = start; i < end; i++) {
-//                    for (int j = 0; j < M; j++) {
-//                        this.result[i][j] = convolution(i, j);
-//                    }
-//                }
-//            } else {
-//                for (int i = 0; i < N; i++) {
-//                    for (int j = start; j < end; j++) {
-//                        this.result[i][j] = convolution(i, j);
-//                    }
-//                }
-//            }
         }
     }
 }

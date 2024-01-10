@@ -1,0 +1,2 @@
+marimi.txt filter=lfs diff=lfs merge=lfs -text
+ppd_lab2_tema/build/resources/main/marimi.txt filter=lfs diff=lfs merge=lfs -text
