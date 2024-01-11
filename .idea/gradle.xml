@@ -60,6 +60,8 @@
         <option name="modules">
           <set>
             <option value="$PROJECT_DIR$/proiect1" />
+            <option value="$PROJECT_DIR$/proiect1/client" />
+            <option value="$PROJECT_DIR$/proiect1/server" />
           </set>
         </option>
       </GradleProjectSettings>
