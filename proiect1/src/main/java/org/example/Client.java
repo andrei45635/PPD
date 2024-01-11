@@ -1,10 +1,15 @@
 package org.example;
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import jakarta.jms.*;
 import org.apache.activemq.ActiveMQConnectionFactory;
 
 import java.io.*;
+import java.lang.reflect.Type;
 import java.net.Socket;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -15,7 +20,7 @@ public class Client {
     private static final AtomicBoolean allProblemsProcessed = new AtomicBoolean(false);
     private static int lineCount = 0;
     private static BufferedReader currentFileReader = null;
-    private static final int problemsPerCountry = 10;
+    private static final int problemsPerCountry = 1;
     private static final int linesPerBatch = 20;
     private static int problemIndex = 0;
     private final int countryId;
@@ -36,7 +41,7 @@ public class Client {
     }
 
     public static void main(String[] args) throws IOException {
-        Client client = new Client(Integer.parseInt(args[0]), "127.0.0.1", 1488);
+        Client client = new Client(Integer.parseInt(args[0]), "127.0.0.1", 1489);
         client.run();
     }
 
@@ -62,6 +67,7 @@ public class Client {
         System.out.println("Successfully connected to server");
         int deltaX = 2000;
         service.scheduleAtFixedRate(this::sendData, 0, deltaX, TimeUnit.MILLISECONDS);
+        service.scheduleAtFixedRate(this::checkAndSendLeaderboardRequest, deltaX, deltaX, TimeUnit.MILLISECONDS);
     }
 
     public void stop() {
@@ -143,7 +149,44 @@ public class Client {
 
         if (problemIndex >= problemsPerCountry) {
             allProblemsProcessed.set(true);
-            stop();
+            //sendLeaderboardRequest();
+            //stop();
+        }
+    }
+
+    public void sendLeaderboardRequest() {
+        String request = String.valueOf(countryId);
+        sendRequestToServer(request);
+    }
+
+    private void checkAndSendLeaderboardRequest() {
+        if (allProblemsProcessed.get()) {
+            sendLeaderboardRequest();
+            //service.shutdown();
+            //stop();
+        }
+    }
+
+    private void sendRequestToServer(String request) {
+        try {
+            out = new PrintWriter(clientSocket.getOutputStream(), true);
+            System.out.println("Sent request: " + request + " from client: " + clientSocket.getPort());
+            out.println(request);
+
+            in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+            String response = in.readLine();
+            System.out.println("Response from server: " + response);
+
+            //Deserializing the response
+            Gson gson = new Gson();
+            Type type = new TypeToken<Map<String, Integer>>(){}.getType();
+            Map<String, Integer> responseMap = gson.fromJson(response, type);
+            System.out.println("Processed response: " + responseMap);
+
+            out.close();
+            in.close();
+        } catch (IOException e) {
+            System.out.println("Error when sending request from Client");
         }
     }
 }

@@ -3,6 +3,8 @@ package org.example.list;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -16,7 +18,7 @@ public class ConcurrentLinkedList {
     private final int nodeIDMutexArraySize = 200;
     private final ReentrantLock[] nodeIDLockArray = new ReentrantLock[nodeIDMutexArraySize];
 
-    private boolean isDisqualified(int idToCheck){
+    private boolean isDisqualified(int idToCheck) {
         try {
             disqualifiedLock.readLock().lock();
             for (Integer id : disqualifiedIDs) {
@@ -25,13 +27,12 @@ public class ConcurrentLinkedList {
                 }
             }
             return false;
-        }
-        finally {
+        } finally {
             disqualifiedLock.readLock().unlock();
         }
     }
 
-    private void disqualify(int idToDisqualify){
+    private void disqualify(int idToDisqualify) {
         disqualifiedLock.writeLock().lock();
         disqualifiedIDs.add(idToDisqualify);
         disqualifiedLock.writeLock().lock();
@@ -54,20 +55,19 @@ public class ConcurrentLinkedList {
             ListNode previousNode = this.start;
             ListNode currentNode = this.start.getNext();
 
-            if(isDisqualified(id)){
+            if (isDisqualified(id)) {
                 return;
             }
 
-            if(disqualified){
+            if (disqualified) {
                 disqualify(id);
             }
 
-            while (currentNode != null){
-                if(currentNode.getId() == id){
-                    if(disqualified) {
+            while (currentNode != null) {
+                if (currentNode.getId() == id) {
+                    if (disqualified) {
                         previousNode.setNext(currentNode.getNext());
-                    }
-                    else{
+                    } else {
                         currentNode.setScore(currentNode.getScore() + score);
                     }
                     return;
@@ -76,7 +76,7 @@ public class ConcurrentLinkedList {
                 currentNode = currentNode.getNext();
             }
 
-            if(!disqualified){
+            if (!disqualified) {
                 ListNode newNode = new ListNode(id, score, country);
                 start.appendNode(newNode);
             }
@@ -84,6 +84,32 @@ public class ConcurrentLinkedList {
         } finally {
             nodeIDLockArray[id % nodeIDMutexArraySize].unlock();
         }
+    }
+
+    public ConcurrentHashMap<String, Integer> calculateLeaderboard() {
+        ConcurrentHashMap<String, Integer> countryScores = new ConcurrentHashMap<>();
+        globalLock.lock();
+        try {
+            ListNode currentNode = start.getNext();
+            while (currentNode != null && currentNode != end) {
+                countryScores.put(currentNode.getCountry(), countryScores.getOrDefault(currentNode.getCountry(), 0) + currentNode.getScore());
+                currentNode = currentNode.getNext();
+            }
+        } finally {
+            globalLock.unlock();
+        }
+
+        return sortCountryScores(countryScores);
+    }
+
+    private ConcurrentHashMap<String, Integer> sortCountryScores(ConcurrentHashMap<String, Integer> countryScores) {
+        List<Map.Entry<String, Integer>> list = new ArrayList<>(countryScores.entrySet());
+        list.sort(Map.Entry.comparingByValue(Comparator.reverseOrder()));
+        ConcurrentHashMap<String, Integer> sortedMap = new ConcurrentHashMap<>();
+        for (Map.Entry<String, Integer> entry : list) {
+            sortedMap.put(entry.getKey(), entry.getValue());
+        }
+        return sortedMap;
     }
 
     //ChatGPT code as placeholder code for sorting, was too tired to finish this

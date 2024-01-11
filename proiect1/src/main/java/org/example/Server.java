@@ -1,5 +1,6 @@
 package org.example;
 
+import com.google.gson.Gson;
 import jakarta.jms.*;
 import org.apache.activemq.ActiveMQConnectionFactory;
 import org.apache.activemq.command.ActiveMQQueue;
@@ -14,18 +15,20 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 
 public class Server {
     private ServerSocket serverSocket;
     private final int port;
     private final int workers = 4;
-    private final int deltaT = 1;
+    private final long deltaT = 1;
+    private volatile ConcurrentHashMap<String, Integer> lastResponse = null;
+    private volatile long lastResponseTime = 0;
     private static final int readers = 4;
     private static final MyQueue<Node> myQueue = new MyQueue<>(true, 100);
     private static final ConcurrentLinkedList concurrentLinkedList = new ConcurrentLinkedList();
     private static final ExecutorService service = Executors.newFixedThreadPool(readers);
+    private ExecutorService leaderboardCalculationService = Executors.newCachedThreadPool();
     public String output = "C:\\Users\\GIGABYTE\\IdeaProjects\\PPD\\proiect1\\src\\main\\resources\\results.txt";
     private Socket clientSocket;
     private PrintWriter out;
@@ -77,15 +80,15 @@ public class Server {
             while (true) {
                 try {
                     System.out.println("Waiting for clients...");
-                    clientSocket = serverSocket.accept();
+                    Socket clientSocket = serverSocket.accept();
                     System.out.println("Client connected...");
-                    new Thread( () -> {
-                       //receiveData();
-                        try {
-                            clientSocket.close();
-                        } catch (IOException e) {
-                            System.out.println("Error closing client socket in start method of server");
-                        }
+                    new Thread(() -> {
+                        handleClient(clientSocket);
+//                        try {
+//                            clientSocket.close();
+//                        } catch (IOException e) {
+//                            System.out.println("Error closing client socket in start method of server");
+//                        }
                     }).start();
                 } catch (IOException e) {
                     System.out.println("Error when creating connection with client in start method in Server");
@@ -101,6 +104,57 @@ public class Server {
         }
     }
 
+    private void handleClient(Socket clientSocket) {
+        PrintWriter out = null;
+        try {
+            BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+            out = new PrintWriter(clientSocket.getOutputStream(), true);
+            Gson gson = new Gson();
+            String clientRequest;
+            while ((clientRequest = in.readLine()) != null) {
+                System.out.println("Received request: " + clientRequest);
+                ConcurrentHashMap<String, Integer> response = new ConcurrentHashMap<>();
+                response.put("RESPONSE", 0);
+                long currentTime = System.currentTimeMillis();
+                Future<ConcurrentHashMap<String, Integer>> future;
+                synchronized (this) {
+                    if (lastResponse != null && (currentTime - lastResponseTime) < deltaT) {
+                        future = CompletableFuture.completedFuture(lastResponse);
+                    } else {
+                        future = leaderboardCalculationService.submit(concurrentLinkedList::calculateLeaderboard);
+                        lastResponse = future.get();
+                        lastResponseTime = currentTime;
+                    }
+                }
+                //Serializes the response
+                response = future.get();
+                String jsonResponse = gson.toJson(response);
+                out.println(jsonResponse);
+                out.flush();
+                System.out.println("Sent JSON response: " + jsonResponse + " to client: " + clientSocket.getPort());
+            }
+        } catch (IOException e) {
+            System.out.println("Error when reading request from the Client " + clientSocket.getPort() + "  in the Server\nError message: " + e.getMessage());
+            e.printStackTrace();
+        } catch (ExecutionException | InterruptedException e) {
+            System.out.println("Error in the future in the handleClient method in the server\nError message: " + e.getMessage() + "\nStack trace: ");
+            e.printStackTrace();
+        } finally {
+            try {
+                if (out != null) {
+                    out.close();
+                }
+                clientSocket.close();
+            } catch (IOException e) {
+                System.out.println("Error closing client connection: " + e.getMessage());
+            }
+        }
+    }
+
+    private ConcurrentHashMap<String, Integer> processRequest(String clientRequest) {
+        return concurrentLinkedList.calculateLeaderboard();
+    }
+
     public void stop() throws IOException {
         in.close();
         out.close();
@@ -109,7 +163,7 @@ public class Server {
     }
 
     public static void write(String filePath) {
-        try(BufferedWriter bufferedWriter = new BufferedWriter(new FileWriter(filePath, true))){
+        try (BufferedWriter bufferedWriter = new BufferedWriter(new FileWriter(filePath, true))) {
             bufferedWriter.write(concurrentLinkedList.printList());
         } catch (IOException e) {
             System.out.println("Error when writing: " + e.getMessage());
@@ -118,19 +172,19 @@ public class Server {
     }
 
     public static void main(String[] args) {
-        Server server = new Server(1488);
+        Server server = new Server(1489);
         List<Thread> threads = new ArrayList<>();
         List<Producer> producers = new ArrayList<>();
         List<Consumer> consumers = new ArrayList<>();
 
         System.out.println(myQueue.size());
-        for(int i = 1; i <= readers; i++) {
+        for (int i = 1; i <= readers; i++) {
             Producer producer = new Producer(myQueue);
             service.execute(producer);
             producers.add(producer);
         }
 
-        for(int i = 1; i <= server.workers; i++) {
+        for (int i = 1; i <= server.workers; i++) {
             Consumer consumer = new Consumer(concurrentLinkedList, myQueue);
             Thread consumerThread = new Thread(consumer);
             consumerThread.start();
@@ -141,7 +195,7 @@ public class Server {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             producers.forEach(Producer::stop);
             consumers.forEach(Consumer::stop);
-            for(Thread thread: threads) {
+            for (Thread thread : threads) {
                 try {
                     thread.join();
                 } catch (InterruptedException e) {
