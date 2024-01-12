@@ -10,6 +10,9 @@ import org.example.queue.MyQueue;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -36,7 +39,6 @@ public class Server {
     private BufferedReader in;
     public String resultsOutput = "C:\\Users\\GIGABYTE\\IdeaProjects\\PPD\\proiect1\\server\\src\\main\\resources\\results.txt";
     public String leaderboardOutput = "C:\\Users\\GIGABYTE\\IdeaProjects\\PPD\\proiect1\\server\\src\\main\\resources\\country_leaderboard.txt";
-
 
     public Server(int port) {
         this.port = port;
@@ -68,6 +70,28 @@ public class Server {
         }
     }
 
+    private void sendResults(Socket clientSocket) throws IOException {
+        byte[] byteData = Files.readAllBytes(Path.of(resultsOutput));
+        try(DataOutputStream dos = new DataOutputStream(clientSocket.getOutputStream())) {
+            dos.writeInt(byteData.length);
+            dos.write(byteData);
+        } catch (SocketException e) {
+            System.out.println(" ");
+        }
+        clientSocket.getOutputStream().flush();
+    }
+
+    private void sendLeaderboard(Socket clientSocket) throws IOException {
+        byte[] byteData = Files.readAllBytes(Path.of(leaderboardOutput));
+        try(DataOutputStream dos = new DataOutputStream(clientSocket.getOutputStream())) {
+            dos.writeInt(byteData.length);
+            dos.write(byteData);
+        }
+        catch (SocketException e) {
+            System.out.println(" ");
+        }
+    }
+
     private void handleClient(Socket clientSocket) {
         PrintWriter out = null;
         try {
@@ -76,48 +100,55 @@ public class Server {
             activeConnections.add(new ClientConnection(clientSocket, out, in));
             Gson gson = new Gson();
             String clientRequest;
-            while ((clientRequest = in.readLine()) != null) {
-                System.out.println("Received request: " + clientRequest);
-                ConcurrentHashMap<String, Integer> response = new ConcurrentHashMap<>();
-                response.put("RESPONSE", 0);
-                long currentTime = System.currentTimeMillis();
-                Future<ConcurrentHashMap<String, Integer>> future;
-                synchronized (this) {
-                    if (lastResponse != null && (currentTime - lastResponseTime) < deltaT) {
-                        future = CompletableFuture.completedFuture(lastResponse);
-                    } else {
-                        future = leaderboardCalculationService.submit(concurrentLinkedList::calculateLeaderboard);
-                        lastResponse = future.get();
-                        lastResponseTime = currentTime;
+            try {
+                while ((clientRequest = in.readLine()) != null) {
+                    System.out.println("Received request: " + clientRequest);
+                    ConcurrentHashMap<String, Integer> response = new ConcurrentHashMap<>();
+                    response.put("RESPONSE", 0);
+                    long currentTime = System.currentTimeMillis();
+                    Future<ConcurrentHashMap<String, Integer>> future;
+                    synchronized (this) {
+                        if (lastResponse != null && (currentTime - lastResponseTime) < deltaT) {
+                            future = CompletableFuture.completedFuture(lastResponse);
+                        } else {
+                            future = leaderboardCalculationService.submit(concurrentLinkedList::calculateLeaderboard);
+                            lastResponse = future.get();
+                            lastResponseTime = currentTime;
+                        }
                     }
-                }
-                //Serializes the response
-                response = future.get();
-                String jsonResponse = gson.toJson(response);
-                out.println(jsonResponse);
-                out.flush();
-                System.out.println("Sent JSON response: " + jsonResponse + " to client: " + clientSocket.getPort());
-                //Send announcement that the server finished the list
-                if (stillMoreWork.get()) {
-                    System.out.println("Sending announcement that the server finished the list...");
-                    out.println("DONE");
+                    //Serializes the response
+                    response = future.get();
+                    String jsonResponse = gson.toJson(response);
+                    out.println(jsonResponse);
                     out.flush();
-
-                    String clientResponse = in.readLine();
-                    if ("ACK".equals(clientResponse)) {
-                        System.out.println("Sending the final leaderboard to the client...");
-                        ConcurrentHashMap<String, Integer> leaderboardList = concurrentLinkedList.calculateLeaderboard();
-                        String jsonLeaderboard = gson.toJson(leaderboardList);
-                        out.println(jsonLeaderboard);
+                    System.out.println("Sent JSON response: " + jsonResponse + " to client: " + clientSocket.getPort());
+                    //Send announcement that the server finished the list
+                    if (stillMoreWork.get()) {
+                        System.out.println("Sending announcement that the server finished the list...");
+                        out.println("DONE");
                         out.flush();
 
-                        System.out.println("Sending the final list to the client...");
-                        String listData = concurrentLinkedList.printList();
-                        String jsonList = gson.toJson(listData);
-                        out.println(jsonList);
-                        out.flush();
+                        String clientResponse = in.readLine();
+                        if ("ACK".equals(clientResponse)) {
+                            System.out.println("Sending the final list to the client...");
+                            String listData = concurrentLinkedList.printList();
+                            String jsonList = gson.toJson(listData);
+                            sendResults(clientSocket);
+                            clientSocket.getOutputStream().flush();
+                            //out.println(jsonList);
+                            //out.flush();
+                            in.read();
+                            System.out.println("Sending the final leaderboard to the client...");
+                            ConcurrentHashMap<String, Integer> leaderboardList = concurrentLinkedList.calculateLeaderboard();
+                            String jsonLeaderboard = gson.toJson(leaderboardList);
+                            sendLeaderboard(clientSocket);
+                            //out.println(jsonLeaderboard);
+                            //out.flush();
+                        }
                     }
                 }
+            } catch (SocketException e){
+                System.out.println(".");
             }
         } catch (IOException e) {
             System.out.println("Error when reading request from the Client " + clientSocket.getPort() + "  in the Server\nError message: " + e.getMessage());
@@ -165,6 +196,7 @@ public class Server {
     public static void main(String[] args) {
         Server server = new Server(1489);
         new Thread(server::start).start();
+        long startTime = System.nanoTime();
         List<Thread> threads = new ArrayList<>();
         List<Producer> producers = new ArrayList<>();
         List<Consumer> consumers = new ArrayList<>();
@@ -195,7 +227,8 @@ public class Server {
                 }
             }
         }));
-
+        long endTime = System.nanoTime();
+        //System.out.println((double) (endTime - startTime) / 1E6);
         concurrentLinkedList.sort();
         System.out.println("List: " + concurrentLinkedList.printList());
         write(server.resultsOutput);

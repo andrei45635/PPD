@@ -1,7 +1,6 @@
 package org.example.parallel;
 
 import org.example.list.ConcurrentLinkedList;
-import org.example.list.MyLinkedList;
 import org.example.list.Node;
 import org.example.queue.MyQueue;
 
@@ -11,18 +10,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class Consumer implements Runnable {
     private final MyQueue<Node> myQueue;
-    private MyLinkedList myLinkedList;
     private ConcurrentLinkedList concurrentLinkedList;
     private boolean running = false;
     private AtomicBoolean stillMoreWork;
     private CountDownLatch latch;
     private ConcurrentHashMap<Integer, String> disqualified = new ConcurrentHashMap<>();
-
-    public Consumer(MyLinkedList myLinkedList, MyQueue<Node> myQueue, AtomicBoolean stillMoreWork) {
-        this.myLinkedList = myLinkedList;
-        this.myQueue = myQueue;
-        this.stillMoreWork = stillMoreWork;
-    }
 
     public Consumer(ConcurrentLinkedList concurrentLinkedList, MyQueue<Node> myQueue, AtomicBoolean stillMoreWork, CountDownLatch latch) {
         this.concurrentLinkedList = concurrentLinkedList;

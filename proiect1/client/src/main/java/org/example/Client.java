@@ -8,6 +8,9 @@ import org.apache.activemq.ActiveMQConnectionFactory;
 import java.io.*;
 import java.lang.reflect.Type;
 import java.net.Socket;
+import java.nio.channels.FileChannel;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -19,7 +22,7 @@ public class Client {
     private static final AtomicBoolean allProblemsProcessed = new AtomicBoolean(false);
     private static int lineCount = 0;
     private static BufferedReader currentFileReader = null;
-    private static final int problemsPerCountry = 10;
+    private static final int problemsPerCountry = 2;
     private static final int linesPerBatch = 20;
     private static int problemIndex = 0;
     private final int countryId;
@@ -166,6 +169,26 @@ public class Client {
         }
     }
 
+    private void receiveResults(Socket socket) throws IOException {
+        DataInputStream dis = new DataInputStream(socket.getInputStream());
+        int fileSize = dis.readInt();
+        byte[] fileData = new byte[fileSize];
+        dis.readFully(fileData);
+        Files.write(Paths.get("C:\\Users\\GIGABYTE\\IdeaProjects\\PPD\\proiect1\\client\\src\\main\\resources\\received_results_1.txt"), fileData);
+    }
+
+    private void receiveLeaderboard(Socket socket) throws IOException {
+        FileChannel src = new FileInputStream("C:\\Users\\GIGABYTE\\IdeaProjects\\PPD\\proiect1\\client\\src\\main\\resources\\received_leaderboard.txt").getChannel();
+        DataInputStream dis = new DataInputStream(socket.getInputStream());
+        int fileSize = dis.readInt();
+        byte[] fileData = new byte[fileSize];
+        dis.readFully(fileData);
+        File file = new File("C:\\Users\\GIGABYTE\\IdeaProjects\\PPD\\proiect1\\client\\src\\main\\resources\\received_leaderboard_1.txt");
+        FileChannel dest = new FileOutputStream(file).getChannel();
+        dest.transferFrom(src, 0, src.size());
+        Files.write(Paths.get("C:\\Users\\GIGABYTE\\IdeaProjects\\PPD\\proiect1\\client\\src\\main\\resources\\received_leaderboard_1.txt"), fileData);
+    }
+
     private void sendRequestToServer(String request) {
         try {
             if (out == null || in == null) {
@@ -193,12 +216,15 @@ public class Client {
             }
 
             System.out.println("Reading data from server...");
-            System.out.println("Reading the final leaderboard...");
-            String leaderboardData = in.readLine();
-            System.out.println("Final leaderboard: " + leaderboardData);
             System.out.println("Reading the final list...");
-            String listData = in.readLine();
-            System.out.println("Final list of results: " + listData);
+            //String listData = in.readLine();
+            receiveResults(clientSocket);
+            //System.out.println("Final list of results: " + listData);
+            System.out.println("Reading the final leaderboard...");
+            //String leaderboardData = in.readLine();
+            receiveLeaderboard(clientSocket);
+            //System.out.println("Final leaderboard: " + leaderboardData);
+
 
             out.close();
             in.close();

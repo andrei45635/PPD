@@ -50,8 +50,7 @@ public class Producer implements Runnable {
                         break;
                     }
 
-                    Message message = consumer.receive(1000); // not sure what this does, ChatGPT says it's some sort of Thread.sleep(1000)
-                    //Message message = consumer.receive();
+                    Message message = consumer.receive(1000);
                     if (message instanceof TextMessage) {
                         TextMessage textMessage = (TextMessage) message;
                         System.out.println("Received - Producer: " + textMessage.getText());
